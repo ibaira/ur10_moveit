@@ -12,6 +12,7 @@ import sys
 def getWaypoints(t, group):
     waypoints = []
     # start with the current pose
+    print "Current Pose: ", group.get_current_pose('ee_link')
     waypoints.append(group.get_current_pose().pose)
 
     # continue with desired trajectory
@@ -20,9 +21,12 @@ def getWaypoints(t, group):
         t = math.radians(i * 6)
         a = 0.5
         wpose = geometry_msgs.msg.Pose()
+        wpose.orientation.x = 0
+        wpose.orientation.y = 0
+        wpose.orientation.z = 1
         wpose.orientation.w = 1
         wpose.position.x = ( a * math.sqrt(2) * math.cos(t) ) / ( math.pow(math.sin(t), 2) + 1 )
-        wpose.position.y = 0.30
+        wpose.position.y = 0.60
         wpose.position.z = ( a * math.sqrt(2) * math.cos(t) * math.sin(t) ) / ( math.pow(math.sin(t), 2) + 1 ) + 0.8
 
         waypoints.append(copy.deepcopy(wpose))
@@ -85,9 +89,9 @@ def main():
 
         attempts += 1 
 
-    # Print out a progress message 
-    if attempts % 10 == 0: 
-        rospy.loginfo("Still trying after " + str(attempts) + " attempts...") 
+        # Print out a progress message 
+        if attempts % 10 == 0: 
+            rospy.loginfo("Still trying after " + str(attempts) + " attempts...") 
 
     # If we have a complete plan, execute the trajectory 
     if fraction == 1.0: 
@@ -97,6 +101,7 @@ def main():
     else: 
         rospy.loginfo("Path planning failed with only " + str(fraction) + " success after " + str(maxtries) + " attempts.") 
 
+    print "Final pose: ", group.get_current_pose('ee_link').pose 
     moveit_commander.roscpp_shutdown()
     moveit_commander.os._exit(0) 
 
