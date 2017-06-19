@@ -8,14 +8,19 @@ import moveit_msgs.msg
 import rospy
 import sys
 
+import timeit
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Point
+
 
 def getWaypoints(t, group):
     waypoints = []
-    # start with the current pose
-    print "Current Pose: ", group.get_current_pose('ee_link')
+    # Start with the current pose
+    print "============ Current Pose:\n", group.get_current_pose('ee_link')
+    print "============ "
     waypoints.append(group.get_current_pose().pose)
 
-    # continue with desired trajectory
+    # Continue with desired trajectory
     for i in xrange(t):
         ''' Waypoints follow a Lemniscate of Bernoulli '''
         t = math.radians(i * 6)
@@ -39,6 +44,7 @@ def main():
     moveit_commander.roscpp_initialize(sys.argv)
     rospy.init_node('move_ur10', anonymous=True)
     cartesian = rospy.get_param('~cartesian', True) 
+    markerPub = rospy.Publisher('robotMarker', Marker, queue_size=10)
 
     robot = moveit_commander.RobotCommander()
     scene = moveit_commander.PlanningSceneInterface()
@@ -75,11 +81,41 @@ def main():
     # Set the internal state to the current state 
     group.set_start_state_to_current_state() 
 
+    # Plot waypoints in Rviz as a points marker type
+    triplePoints = []
+    for i, waypt in enumerate(waypoints):
+        p = Point() 
+        p.x = waypt.position.x
+        p.y = waypt.position.y
+        p.z = waypt.position.z
+        triplePoints.append(p)
+
+    marker = Marker()
+    marker.header.frame_id = "/world"
+    marker.type = 8                 # Points
+    marker.action = 0               # Add
+    marker.pose.orientation.w = 1
+
+    marker.points = triplePoints
+    marker.lifetime = rospy.Duration()
+    marker.scale.x = 0.015
+    marker.scale.y = 0.015
+    marker.scale.z = 0.015
+
+    marker.color.a = 1.0
+    marker.color.r = 1.0
+    marker.color.g = 1.0
+    marker.color.b = 1.0
+
+    markerPub.publish(marker)        
+
     # Plan the Cartesian path connecting the waypoints 
     ## We want the cartesian path to be interpolated at a resolution of 1 cm
     ## which is why we will specify 0.01 as the eef_step in cartesian
     ## translation.  We will specify the jump threshold as 0.0, effectively
     ## disabling it.
+    start_time = timeit.default_timer()
+    
     while fraction < 1.0 and attempts < maxtries: 
         (plan, fraction) = group.compute_cartesian_path ( 
                                     waypoints,   # waypoint poses 
@@ -92,6 +128,10 @@ def main():
         # Print out a progress message 
         if attempts % 10 == 0: 
             rospy.loginfo("Still trying after " + str(attempts) + " attempts...") 
+    
+    elapsed = timeit.default_timer() - start_time
+    print "Planning took ", elapsed, " seconds."
+    print "============ "
 
     # If we have a complete plan, execute the trajectory 
     if fraction == 1.0: 
@@ -100,8 +140,9 @@ def main():
         rospy.loginfo("Path execution complete.") 
     else: 
         rospy.loginfo("Path planning failed with only " + str(fraction) + " success after " + str(maxtries) + " attempts.") 
+   
 
-    print "Final pose: ", group.get_current_pose('ee_link').pose 
+    print "============ Final pose:\n", group.get_current_pose('ee_link').pose 
     moveit_commander.roscpp_shutdown()
     moveit_commander.os._exit(0) 
 
