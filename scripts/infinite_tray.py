@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 
+""" 
+infinite_tray.py: This script commands the UR10 robot to follow a Lemniscata trajectory with its end-effector.
+
+The script makes use of the MoveIt ROS package for the computation of the desired cartesian path. The display 
+of the robot and the desired trajectory markers are shown in Rviz. 
+"""
+
+__author__ = "Ismael Baira Ojeda"
+__maintainer__ = "Ismael Baira Ojeda"
+__email__ = "iboj@elektro.dtu.dk, i.bairao@gmail.com"
+
 import copy
 import geometry_msgs.msg
 import math
@@ -14,6 +25,7 @@ from geometry_msgs.msg import Point
 
 
 def getWaypoints(t, group):
+    '''Waypoints follow a Lemniscate of Bernoulli'''
     waypoints = []
     # Start with the current pose
     print "============ Current Pose:\n", group.get_current_pose('ee_link')
@@ -21,8 +33,7 @@ def getWaypoints(t, group):
     waypoints.append(group.get_current_pose().pose)
 
     # Continue with desired trajectory
-    for i in xrange(t):
-        ''' Waypoints follow a Lemniscate of Bernoulli '''
+    for i in xrange(t):        
         t = math.radians(i * 6)
         a = 0.5
         wpose = geometry_msgs.msg.Pose()
@@ -31,8 +42,8 @@ def getWaypoints(t, group):
         wpose.orientation.z = 1
         wpose.orientation.w = 1
         wpose.position.x = ( a * math.sqrt(2) * math.cos(t) ) / ( math.pow(math.sin(t), 2) + 1 )
-        wpose.position.y = 0.60
-        wpose.position.z = ( a * math.sqrt(2) * math.cos(t) * math.sin(t) ) / ( math.pow(math.sin(t), 2) + 1 ) + 0.8
+        wpose.position.y = 0.40
+        wpose.position.z = ( a * math.sqrt(2) * math.cos(t) * math.sin(t) ) / ( math.pow(math.sin(t), 2) + 1 ) + 1.0
 
         waypoints.append(copy.deepcopy(wpose))
 
@@ -43,7 +54,8 @@ def getWaypoints(t, group):
 def main():
     moveit_commander.roscpp_initialize(sys.argv)
     rospy.init_node('move_ur10', anonymous=True)
-    cartesian = rospy.get_param('~cartesian', True) 
+    cartesian = rospy.get_param('~cartesian', True)     # Get param from ~private namespace and 
+                                                        # initialize it (True) if it doesn't exist
     markerPub = rospy.Publisher('robotMarker', Marker, queue_size=10)
 
     robot = moveit_commander.RobotCommander()
@@ -72,11 +84,6 @@ def main():
 
     print "Starting cartesian path planning: Lemniscata trajectory"
     waypoints = getWaypoints(60, group)
-        
-    if cartesian: 
-        fraction = 0.0 
-        maxtries = 100 
-        attempts = 0 
 
     # Set the internal state to the current state 
     group.set_start_state_to_current_state() 
@@ -92,12 +99,12 @@ def main():
 
     marker = Marker()
     marker.header.frame_id = "/world"
-    marker.type = 8                 # Points
-    marker.action = 0               # Add
+    marker.type = 8                         # 8 = Points
+    marker.action = 0                       # 0 = Add
     marker.pose.orientation.w = 1
 
     marker.points = triplePoints
-    marker.lifetime = rospy.Duration()
+    marker.lifetime = rospy.Duration(0)     # 0 = infinite
     marker.scale.x = 0.015
     marker.scale.y = 0.015
     marker.scale.z = 0.015
@@ -107,30 +114,40 @@ def main():
     marker.color.g = 1.0
     marker.color.b = 1.0
 
+    # Publishing waypoints
+    print "Displaying desired waypoints"
     markerPub.publish(marker)        
 
     # Plan the Cartesian path connecting the waypoints 
+    start_time = timeit.default_timer()
+
     ## We want the cartesian path to be interpolated at a resolution of 1 cm
     ## which is why we will specify 0.01 as the eef_step in cartesian
     ## translation.  We will specify the jump threshold as 0.0, effectively
     ## disabling it.
-    start_time = timeit.default_timer()
-    
-    while fraction < 1.0 and attempts < maxtries: 
-        (plan, fraction) = group.compute_cartesian_path ( 
-                                    waypoints,   # waypoint poses 
-                                    0.01,        # eef_step 
-                                    0.0,         # jump_threshold 
-                                    True )       # avoid_collisions 
+    if cartesian: 
+        fraction = 0.0 
+        maxtries = 100 
+        attempts = 0 
 
-        attempts += 1 
+        while fraction < 1.0 and attempts < maxtries: 
+            (plan, fraction) = group.compute_cartesian_path ( 
+                                        waypoints,   # waypoint poses 
+                                        0.01,        # eef_step 
+                                        0.0,         # jump_threshold 
+                                        True )       # avoid_collisions 
 
-        # Print out a progress message 
-        if attempts % 10 == 0: 
-            rospy.loginfo("Still trying after " + str(attempts) + " attempts...") 
-    
-    elapsed = timeit.default_timer() - start_time
-    print "Planning took ", elapsed, " seconds."
+            attempts += 1 
+
+            # Print out a progress message 
+            if attempts % 10 == 0: 
+                rospy.loginfo("Still trying after " + str(attempts) + " attempts...") 
+        
+        elapsed = timeit.default_timer() - start_time
+        print "Planning cartesian path took ", elapsed, " seconds."
+
+    else:
+        rospy.loginfo("Cartesian path computation not done: Private param '~cartesian' needs to be set to 'True'") 
     print "============ "
 
     # If we have a complete plan, execute the trajectory 
@@ -139,8 +156,7 @@ def main():
         group.execute(plan) 
         rospy.loginfo("Path execution complete.") 
     else: 
-        rospy.loginfo("Path planning failed with only " + str(fraction) + " success after " + str(maxtries) + " attempts.") 
-   
+        rospy.loginfo("Path planning failed with only " + str(fraction) + " success after " + str(maxtries) + " attempts.")    
 
     print "============ Final pose:\n", group.get_current_pose('ee_link').pose 
     moveit_commander.roscpp_shutdown()

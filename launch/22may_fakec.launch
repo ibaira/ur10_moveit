@@ -7,11 +7,7 @@
     edit: Marie Claire Capolei s151188@student.dtu.dk
 -->
 
-<launch>
-
-	
-	
-
+<launch>	
         <arg name="odom_frame_id"   default="odom"/>
         <arg name="base_frame_id"   default="base_link"/>
         <arg name="global_frame_id" default="world"/>
@@ -30,7 +26,31 @@
 	<arg name="limited" default="false" />
 	</include> 
 	<include file="$(find my_ur10_limited)/launch/move_group.launch"></include>-->
-	
+
+
+
+
+
+
+	<!-- UR10 TO GAZEBO -->
+	<!-- Convert xacro and put on parameter server -->
+	<param name="robot_description" command="$(find xacro)/xacro.py $(find ur_description)/urdf/ur10_robot.urdf.xacro" />
+
+	<!-- Spawn a robot into Gazebo -->
+	<arg name="robot_name" default="ur10"/>
+	<node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-param robot_description -urdf -model robot" />
+
+ 
+	<!-- start robot state publisher -->
+<!-- 	<node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher_hector" output="screen" >
+	 <param name="publish_frequency" type="double" value="50.0" />
+	 <param name="tf_prefix" type="string" value="$(arg robot_name)" />
+	</node> -->
+	<!-- END UR10 TO GAZEBO -->
+
+
+
+
 	
 	<!-- We do not have a robot connected, so publish fake joint states -->
 	 <rosparam command="load" file="$(find my_ur10_limited)/config/joint_zeros.yaml" />
